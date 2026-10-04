@@ -1,0 +1,39 @@
+# Code-only repository: the report, slides and results are submitted separately.
+# Paths start with "/" so they only match folders at the top level (src/models/ is code and is kept).
+
+# Course materials
+/slides/
+
+# Report, presentation and documentation
+/report/
+/final/
+/docs/
+
+# Generated results (re-created by the scripts: audit_data, make_splits, model_report, evaluate, gradcam, error_analysis)
+/figures/
+/reports/
+
+# Python environment and caches
+/.venv/
+__pycache__/
+*.py[cod]
+.ipynb_checkpoints/
+.pytest_cache/
+
+# Dataset images and derived data (re-create with scripts/download_data.py and scripts/audit_data.py)
+/data/raw/
+/data/cache/
+/data/metadata.csv
+
+# Model weights and per-run training logs (large; re-created by scripts/train.py)
+/models/
+/logs/
+*.keras
+*.h5
+
+# OS / editor files
+.DS_Store
+Thumbs.db
+desktop.ini
+~$*
+.vscode/

@@ -1,0 +1,21 @@
+{
+  "image_size": 224,
+  "seed": 42,
+  "split_ratios": {"train": 0.70, "val": 0.15, "test": 0.15},
+  "grouping": {
+    "block_size": 25,
+    "near_duplicate_phash_max": 6,
+    "near_duplicate_thumb_max": 0.03,
+    "near_duplicate_gap_max": 50
+  },
+  "label_conflict": {
+    "phash_max": 2,
+    "thumb_max": 0.01
+  },
+  "manual_exclusions": [
+    {
+      "path": "data/raw/FRUIT-16K/F_Banana/1.jpg",
+      "reason": "label conflict: same photo as data/raw/FRUIT-16K/S_Banana/6.jpg (pHash distance 0); the banana is visibly spoiled"
+    }
+  ]
+}

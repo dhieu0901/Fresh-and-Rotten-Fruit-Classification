@@ -1,0 +1,3 @@
+Images copied from the test split of the Spoiled and Fresh Fruit Inspection Dataset
+(Pachon Suescun, Pinzon Arenas, Jimenez-Moreno, 2020), Mendeley Data, DOI 10.17632/6ps7gtp2wg.1, licence CC BY 4.0.
+File names give the true label; hard_case_* are test images that Model 3 misclassified.
