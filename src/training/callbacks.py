@@ -1,11 +1,12 @@
-"""Callbacks used by every training run (same settings for all three models)."""
+"""Callbacks used for every training run."""
+
 import time
 
 import keras
 
 
 class EpochTimer(keras.callbacks.Callback):
-    """Adds `epoch_time` (seconds) to the epoch logs (picked up by CSVLogger; Keras logs `learning_rate` itself)."""
+    """Adds the epoch duration (seconds) to the logs, so CSVLogger saves it."""
 
     def on_epoch_begin(self, epoch, logs=None):
         self._start = time.perf_counter()
@@ -16,8 +17,8 @@ class EpochTimer(keras.callbacks.Callback):
 
 
 class RestoreBest(keras.callbacks.Callback):
-    """Resumed run: give EarlyStopping / ReduceLROnPlateau back the best value reached before the
-    interruption (their on_train_begin resets it). Must come after them in the callback list."""
+    """When a run is resumed, give EarlyStopping and ReduceLROnPlateau back the best val_loss reached
+    before the interruption (their on_train_begin resets it)."""
 
     def __init__(self, callbacks, best):
         super().__init__()
@@ -28,26 +29,32 @@ class RestoreBest(keras.callbacks.Callback):
             callback.best = self.best
 
 
-def make_callbacks(run_dir, checkpoint_path, monitor="val_loss", early_stopping_patience=8,
-                   reduce_lr_patience=3, reduce_lr_factor=0.3, min_lr=1e-6, log_name="history.csv", resume_best=None):
-    """Best-checkpoint saving, early stopping, LR reduction on plateau, per-epoch CSV log.
-
-    resume_best: best monitored value of an interrupted run that continues from its checkpoint
-    (scripts/train.py --resume) - the checkpoint is then only replaced by a better epoch and the
-    CSV log is appended to.
-    """
-    early_stopping = keras.callbacks.EarlyStopping(monitor=monitor, patience=early_stopping_patience,
-                                                   restore_best_weights=True, verbose=1)
-    reduce_lr = keras.callbacks.ReduceLROnPlateau(monitor=monitor, factor=reduce_lr_factor, patience=reduce_lr_patience,
-                                                  min_lr=min_lr, verbose=1)
+def make_callbacks(
+    run_dir,
+    checkpoint_path,
+    monitor="val_loss",
+    early_stopping_patience=8,
+    reduce_lr_patience=3,
+    reduce_lr_factor=0.3,
+    min_lr=1e-6,
+    log_name="history.csv",
+    resume_best=None,
+):
+    early_stopping = keras.callbacks.EarlyStopping(
+        monitor=monitor, patience=early_stopping_patience, restore_best_weights=True, verbose=1
+    )
+    reduce_lr = keras.callbacks.ReduceLROnPlateau(
+        monitor=monitor, factor=reduce_lr_factor, patience=reduce_lr_patience, min_lr=min_lr, verbose=1
+    )
     callbacks = [
-        EpochTimer(),  # must run before CSVLogger so its values are logged
-        keras.callbacks.ModelCheckpoint(str(checkpoint_path), monitor=monitor, save_best_only=True,
-                                        initial_value_threshold=resume_best),
+        EpochTimer(),  # before CSVLogger, otherwise epoch_time is not logged
+        keras.callbacks.ModelCheckpoint(
+            str(checkpoint_path), monitor=monitor, save_best_only=True, initial_value_threshold=resume_best
+        ),
         early_stopping,
         reduce_lr,
         keras.callbacks.CSVLogger(str(run_dir / log_name), append=resume_best is not None),
     ]
     if resume_best is not None:
-        callbacks.append(RestoreBest([early_stopping, reduce_lr], resume_best))
+        callbacks.append(RestoreBest([early_stopping, reduce_lr], resume_best))  # must come after them
     return callbacks

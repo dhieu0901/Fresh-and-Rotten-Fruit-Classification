@@ -1,11 +1,9 @@
-"""Predict fruit type and freshness of new images with the trained models (demo).
+"""Predict fruit type and freshness for new images with the trained models.
 
-    python scripts/predict.py demo/demo_images/*.jpg
-    python scripts/predict.py photo.jpg --models model3_mobilenet_v2 --gradcam figures/demo_gradcam.png
-
-Any RGB image works: it is centre-cropped to a square and resized to 224 x 224; normalisation
-happens inside each model.
+python scripts/predict.py demo/demo_images/*.jpg
+python scripts/predict.py photo.jpg --models model3_mobilenet_v2 --gradcam figures/demo_gradcam.png
 """
+
 import argparse
 import glob
 import os
@@ -36,8 +34,11 @@ def main():
     if not paths:
         sys.exit("no images found")
     images = np.stack([load_image(p) for p in paths])
-    models = {name: keras.models.load_model(MODELS_DIR / f"{name}.keras") for name in args.models
-              if (MODELS_DIR / f"{name}.keras").exists()}
+    models = {
+        name: keras.models.load_model(MODELS_DIR / f"{name}.keras")
+        for name in args.models
+        if (MODELS_DIR / f"{name}.keras").exists()
+    }
     if not models:
         sys.exit(f"no trained models found in {MODELS_DIR}")
 
@@ -47,12 +48,16 @@ def main():
         for name, r in results.items():
             fruit = FRUITS[r["fruit_pred"][i]]
             state = "SPOILED" if r["fresh_pred"][i] else "fresh"
-            print(f"  {name:22s} {fruit:10s} (p={r['fruit_prob'][i].max():.2f})   {state:7s} (P(spoiled)={r['spoiled_prob'][i]:.2f})")
+            print(
+                f"  {name:22s} {fruit:10s} (p={r['fruit_prob'][i].max():.2f})   {state:7s} (P(spoiled)={r['spoiled_prob'][i]:.2f})"
+            )
 
     if args.gradcam:
         import matplotlib.pyplot as plt
+
         from src import viz
         from src.evaluation.gradcam import gradcam, overlay
+
         viz.apply_style()
         name, model = list(models.items())[-1]
         heat = gradcam(model, images, "freshness")
@@ -60,8 +65,11 @@ def main():
         fig, axes = plt.subplots(2, len(paths), figsize=(2.2 * len(paths), 4.8), squeeze=False)
         for i in range(len(paths)):
             axes[0, i].imshow(images[i].astype(np.uint8))
-            axes[0, i].set_title(f"{FRUITS[r['fruit_pred'][i]]}\n{'spoiled' if r['fresh_pred'][i] else 'fresh'} "
-                                 f"({r['spoiled_prob'][i]:.2f})", fontsize=8)
+            axes[0, i].set_title(
+                f"{FRUITS[r['fruit_pred'][i]]}\n{'spoiled' if r['fresh_pred'][i] else 'fresh'} "
+                f"({r['spoiled_prob'][i]:.2f})",
+                fontsize=8,
+            )
             axes[1, i].imshow(overlay(images[i], heat[i]))
             for ax in axes[:, i]:
                 ax.axis("off")

@@ -1,0 +1,41 @@
+SPLIT AUDIT - Fresh and Rotten Fruit Classification
+============================================================
+Seed 42 | target train/val/test = 70%/15%/15%
+Grouping: blocks of 25 consecutive frames per class folder, merged whenever two images of the class
+are near-duplicates: pHash distance <= 6 AND (16x16 thumbnail distance <= 0.03 OR at most 50 files apart).
+Whole groups are assigned to one split, separately inside each of the 16 classes (stratified),
+largest groups first, each to the split with the most room left.
+
+1. Cleaning
+   raw files: 16000 | excluded: 1274 | kept: 14726
+   - exact duplicate: 1273
+   - manual review: 1
+
+2. Groups
+   near-duplicate pairs inside classes: 1026
+   groups: 492 | per class min/median/max: 20/30/39
+   group size min/median/max: 13/25/323
+   largest group as share of its class: max 34.7% (Tomato_spoiled)
+
+3. Split sizes
+   train: 10320 images (70.1%)
+   val  :  2203 images (15.0%)
+   test :  2203 images (15.0%)
+   largest per-class deviation from the target share: 1.3 percentage points
+   per-class counts: reports/class_distribution.csv
+
+4. Integrity checks (all must be 0)
+   files assigned to more than one split: 0
+   SHA-256 shared between splits: 0
+   groups spanning more than one split: 0
+   near-duplicate pairs crossing splits: 0
+
+5. Leakage: share of evaluation images with a near-copy of the same class in TRAIN
+   (the naive random split is shown only for comparison; it is not used)
+   metric                                                random val   random test   grouped val  grouped test
+   n_images                                                    2209          2209          2203          2203
+   near-duplicate in train (pHash<=6 & thumb<=0.03)            5.9%          6.5%          0.0%          0.0%
+   pHash<=6 match in train                                    10.0%          9.7%          0.7%          1.2%
+   pHash<=10 match in train                                   34.0%         32.9%         11.5%         14.6%
+   thumb<=0.03 match in train                                 26.3%         26.0%          8.5%          5.7%
+   median nearest pHash distance                                 12            12            16            14

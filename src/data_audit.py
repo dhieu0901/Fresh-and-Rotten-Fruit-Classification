@@ -1,19 +1,10 @@
-"""Data cleaning and leakage-aware train/val/test splitting.
+"""Dataset scan, cleaning and the grouped train/val/test split.
 
-Why this module exists: the dataset was captured as bursts of frames, so consecutive files
-in a class folder are often near-copies of each other (and 1,273 files are byte-identical
-copies). A plain random split would put near-identical frames in both train and test and
-inflate test accuracy. The split is therefore made over *groups* of related images.
-
-Steps (used by scripts/audit_data.py and scripts/make_splits.py):
-    scan_dataset              one row per file: labels, file stats, SHA-256, pHash, colour stats
-    mark_exact_duplicates     keep the first file of every SHA-256 group
-    find_label_conflicts      near-identical images stored under two different labels
-    near_duplicate_pairs      near-identical images inside one class folder
-    build_groups              blocks of consecutive frames, merged through near-duplicate pairs
-    grouped_stratified_split  whole groups -> train/val/test, separately per class
-    leakage_summary           share of evaluation images that have a near-copy in train
+The photos were taken in bursts, so neighbouring files in a folder are often near-copies. A random
+split by image would put almost identical frames in train and test, so the split assigns whole
+groups of related images instead.
 """
+
 import hashlib
 import time
 from pathlib import Path
@@ -30,13 +21,8 @@ SCAN_CSV = CACHE_DIR / "scan.csv"
 THUMBS_NPY = CACHE_DIR / "thumbs.npy"
 
 
-# ----------------------------------------------------------------------------- scanning
 def scan_dataset(dataset_dir):
-    """Read every image once.
-
-    Returns (df, thumbs): df has one row per file; thumbs[i] is the 16x16 RGB thumbnail of
-    row i flattened to 768 values in [0, 1] (NaN for unreadable files).
-    """
+    """Read every image once. Returns one row per file and the 16x16 thumbnails (flattened, NaN if unreadable)."""
     rows, thumbs = [], []
     folders = sorted(p for p in Path(dataset_dir).iterdir() if p.is_dir())
     for folder in folders:
@@ -69,7 +55,7 @@ def scan_dataset(dataset_dir):
                     row[f"meansq_{channel}"] = float((pixels[..., i] ** 2).mean())
                 row["readable"] = True
                 thumb = np.asarray(rgb.resize((THUMB_SIZE, THUMB_SIZE), Image.BILINEAR), np.float32) / 255.0
-            except Exception as exc:  # corrupt or non-image file
+            except Exception as exc:  # broken file
                 row.update(readable=False, error=repr(exc))
                 thumb = np.full((THUMB_SIZE, THUMB_SIZE, 3), np.nan, np.float32)
             rows.append(row)
@@ -78,7 +64,7 @@ def scan_dataset(dataset_dir):
 
 
 def load_or_scan(rescan=False):
-    """Cached scan_dataset(): data/cache/scan.csv + data/cache/thumbs.npy."""
+    """scan_dataset() with a cache in data/cache/."""
     if not rescan and SCAN_CSV.exists() and THUMBS_NPY.exists():
         return pd.read_csv(SCAN_CSV, keep_default_na=False, na_values=[""]), np.load(THUMBS_NPY)
     t0 = time.time()
@@ -92,7 +78,7 @@ def load_or_scan(rescan=False):
 
 
 def prepare(rescan=False):
-    """Scan + exact duplicates + label conflicts + cleaning decisions (configs/data_config.json)."""
+    """Scan, then mark duplicates, label conflicts and excluded files (settings in configs/data_config.json)."""
     cfg = load_json("data_config.json")
     df, thumbs = load_or_scan(rescan)
     df = mark_exact_duplicates(df)
@@ -102,27 +88,25 @@ def prepare(rescan=False):
     return cfg, df, thumbs, conflicts
 
 
-# ----------------------------------------------------------------------------- distances
 def phash_array(df):
     return np.array([int(h, 16) for h in df["phash"]], dtype=np.uint64)
 
 
 def hamming(a, b):
-    """Pairwise Hamming distance between two arrays of 64-bit perceptual hashes."""
+    """Pairwise Hamming distance between two arrays of 64-bit pHashes."""
     return np.bitwise_count(a[:, None] ^ b[None, :]).astype(np.int16)
 
 
 def thumb_distance(a, b, chunk=64):
-    """Pairwise mean absolute difference between flattened thumbnails (0 = identical, 1 = opposite)."""
+    """Pairwise mean absolute difference between thumbnails (0 = identical)."""
     out = np.empty((len(a), len(b)), np.float32)
     for start in range(0, len(a), chunk):
-        out[start:start + chunk] = np.abs(a[start:start + chunk, None, :] - b[None, :, :]).mean(-1)
+        out[start : start + chunk] = np.abs(a[start : start + chunk, None, :] - b[None, :, :]).mean(-1)
     return out
 
 
-# ----------------------------------------------------------------------------- cleaning
 def mark_exact_duplicates(df):
-    """Flag byte-identical files; the first file (lowest index in folder order) is kept."""
+    """Flag byte-identical files; the first one of each group is kept."""
     first = df.groupby("sha256", sort=False)["path"].transform("first")
     df["duplicate_of"] = np.where(df["path"] != first, first, "")
     df["is_exact_duplicate"] = df["duplicate_of"] != ""
@@ -130,8 +114,7 @@ def mark_exact_duplicates(df):
 
 
 def find_label_conflicts(df, thumbs, phash_max, thumb_max, chunk=2000):
-    """Near-identical images (pHash <= phash_max and thumbnail distance <= thumb_max) that are
-    stored under different class labels. Exact duplicates are ignored (their kept copy is checked)."""
+    """Near-identical images that are stored under two different labels."""
     mask = (df["readable"] & ~df["is_exact_duplicate"]).to_numpy()
     idx = np.where(mask)[0]
     ph = phash_array(df.iloc[idx])
@@ -151,11 +134,8 @@ def find_label_conflicts(df, thumbs, phash_max, thumb_max, chunk=2000):
 
 
 def apply_cleaning(df, conflicts, manual_exclusions):
-    """Decide which files are excluded and record why (columns `excluded`, `exclude_reason`).
-
-    Order of rules: unreadable -> exact duplicate copy -> manual exclusion (reviewed label
-    conflicts) -> any label conflict not resolved manually (both images dropped).
-    """
+    """Columns `excluded` and `exclude_reason`: unreadable files, duplicate copies, manual exclusions,
+    and label conflicts that were not resolved by hand (both images dropped)."""
     reason = pd.Series("", index=df.index, dtype=object)
     reason[~df["readable"]] = "unreadable file"
     is_dup = (reason == "") & df["is_exact_duplicate"]
@@ -173,13 +153,8 @@ def apply_cleaning(df, conflicts, manual_exclusions):
 
 
 def near_duplicate_pairs(df, thumbs, phash_max, thumb_max, gap_max=0):
-    """Positional index pairs (i < j) of near-identical images inside the same class.
-
-    A pair qualifies when pHash distance <= phash_max AND either the thumbnail distance is
-    <= thumb_max (near-identical pixels) or the two frames are at most `gap_max` files apart
-    (same fruit re-shot a few seconds later under slightly different light).
-    `thumbs` must be aligned with the rows of `df`.
-    """
+    """Index pairs (i < j) of near-duplicates inside one class: close pHash, and either close thumbnails
+    or at most `gap_max` files apart (same fruit shot again a few seconds later)."""
     ph = phash_array(df)
     file_index = df["file_index"].to_numpy()
     pairs = []
@@ -195,10 +170,8 @@ def near_duplicate_pairs(df, thumbs, phash_max, thumb_max, gap_max=0):
     return np.concatenate(pairs) if pairs else np.empty((0, 2), dtype=int)
 
 
-# ----------------------------------------------------------------------------- grouping & splitting
 def build_groups(df, pairs, block_size):
-    """Union-find over (a) blocks of `block_size` consecutive frames of one class folder and
-    (b) near-duplicate pairs. Returns a 0-based group id per row of `df`."""
+    """Group id per row: blocks of `block_size` consecutive frames, merged through the near-duplicate pairs (union-find)."""
     parent = np.arange(len(df))
 
     def find(x):
@@ -225,12 +198,8 @@ def build_groups(df, pairs, block_size):
 
 
 def grouped_stratified_split(df, ratios, seed):
-    """Assign whole groups to splits separately inside every class (stratification).
-
-    Groups are processed largest first (random order among equal sizes) and each goes to the
-    split with the most room left (target count minus current count), so large near-duplicate
-    clusters land in train and cannot unbalance the validation or test set.
-    """
+    """Assign whole groups to splits, separately in each class. The largest groups go first, each to the
+    split that is furthest below its target size, so big clusters end up in train."""
     names = list(ratios)
     target = np.array([ratios[n] for n in names], dtype=float)
     rng = np.random.default_rng(seed)
@@ -250,7 +219,7 @@ def grouped_stratified_split(df, ratios, seed):
 
 
 def random_stratified_split(df, ratios, seed):
-    """Naive image-level stratified split - used only as the leaky baseline in the audit."""
+    """Plain stratified split by image, only used to show the leakage in the audit."""
     from sklearn.model_selection import train_test_split
 
     idx = np.arange(len(df))
@@ -263,13 +232,8 @@ def random_stratified_split(df, ratios, seed):
     return split
 
 
-# ----------------------------------------------------------------------------- leakage audit
 def nearest_train_match(df, thumbs, split, eval_split, phash_max, thumb_max):
-    """For each image of `eval_split`: distance to the closest train image of the same class.
-
-    Returns a DataFrame with min_phash, min_thumb and near_duplicate (a train image exists with
-    pHash <= phash_max AND thumbnail distance <= thumb_max - the grouping criterion).
-    """
+    """Distance from each image of `eval_split` to the closest train image of the same class."""
     ph = phash_array(df)
     records = []
     for _, idx in df.groupby("combined_label").indices.items():

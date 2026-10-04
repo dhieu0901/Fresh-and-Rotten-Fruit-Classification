@@ -1,37 +1,37 @@
-# Code-only repository: the report, slides and results are submitted separately.
-# Paths start with "/" so they only match folders at the top level (src/models/ is code and is kept).
-
-# Course materials
+# course materials and the written report (handed in separately)
 /slides/
-
-# Report, presentation and documentation
 /report/
 /final/
 /docs/
 
-# Generated results (re-created by the scripts: audit_data, make_splits, model_report, evaluate, gradcam, error_analysis)
-/figures/
-/reports/
-
-# Python environment and caches
-/.venv/
-__pycache__/
-*.py[cod]
-.ipynb_checkpoints/
-.pytest_cache/
-
-# Dataset images and derived data (re-create with scripts/download_data.py and scripts/audit_data.py)
+# dataset (scripts/download_data.py) and files made from it
 /data/raw/
 /data/cache/
 /data/metadata.csv
 
-# Model weights and per-run training logs (large; re-created by scripts/train.py)
+# trained models and training logs (too large, made by scripts/train.py)
 /models/
 /logs/
 *.keras
 *.h5
 
-# OS / editor files
+# per-image and per-run details (made again by scripts/evaluate.py and scripts/audit_data.py)
+/reports/predictions/
+/reports/per_class/
+/reports/tables/
+/reports/duplicate_groups.csv
+/reports/fruit_metrics.csv
+/reports/freshness_metrics.csv
+
+# python
+/.venv/
+__pycache__/
+*.py[cod]
+.ipynb_checkpoints/
+.pytest_cache/
+.ruff_cache/
+
+# os / editor
 .DS_Store
 Thumbs.db
 desktop.ini

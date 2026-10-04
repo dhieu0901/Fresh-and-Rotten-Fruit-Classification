@@ -1,4 +1,5 @@
-"""Model factory and compile settings shared by training, evaluation and tests."""
+"""Build and compile the three models by name."""
+
 import keras
 
 from src.models.multitask_cnn import build_multitask_cnn
@@ -22,20 +23,27 @@ def build_model(name, **kwargs):
 
 
 def compile_model(model, label_mode, learning_rate, loss_weights=None):
-    """Model 1: sparse categorical cross-entropy over 16 classes.
-    Models 2/3: cross-entropy (fruit) + binary cross-entropy (freshness), weighted sum."""
+    """Model 1: cross-entropy over the 16 classes. Models 2/3: cross-entropy (fruit) + binary cross-entropy (freshness)."""
     optimizer = keras.optimizers.Adam(learning_rate)
     if label_mode == "combined":
-        model.compile(optimizer=optimizer,
-                      loss=keras.losses.SparseCategoricalCrossentropy(),
-                      metrics=[keras.metrics.SparseCategoricalAccuracy(name="accuracy")])
+        model.compile(
+            optimizer=optimizer,
+            loss=keras.losses.SparseCategoricalCrossentropy(),
+            metrics=[keras.metrics.SparseCategoricalAccuracy(name="accuracy")],
+        )
     else:
-        model.compile(optimizer=optimizer,
-                      loss={"fruit": keras.losses.SparseCategoricalCrossentropy(),
-                            "freshness": keras.losses.BinaryCrossentropy()},
-                      loss_weights=loss_weights or {"fruit": 1.0, "freshness": 1.0},
-                      metrics={"fruit": [keras.metrics.SparseCategoricalAccuracy(name="accuracy")],
-                               "freshness": [keras.metrics.BinaryAccuracy(name="accuracy"), keras.metrics.AUC(name="auc")]})
+        model.compile(
+            optimizer=optimizer,
+            loss={
+                "fruit": keras.losses.SparseCategoricalCrossentropy(),
+                "freshness": keras.losses.BinaryCrossentropy(),
+            },
+            loss_weights=loss_weights or {"fruit": 1.0, "freshness": 1.0},
+            metrics={
+                "fruit": [keras.metrics.SparseCategoricalAccuracy(name="accuracy")],
+                "freshness": [keras.metrics.BinaryAccuracy(name="accuracy"), keras.metrics.AUC(name="auc")],
+            },
+        )
     return model
 
 

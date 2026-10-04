@@ -1,21 +1,14 @@
-"""Model summaries, parameter counts and CPU cost of the three models.
+"""Model summaries, parameter counts and CPU cost (training step time, inference time) of every model variant.
 
-Usage:
-    python scripts/model_report.py              # all models
-    python scripts/model_report.py --steps 10   # fewer timing steps (quicker)
+    python scripts/model_report.py
+    python scripts/model_report.py --no-timing     # only summaries and parameter counts
 
-Writes
-    reports/model_summaries/<model>.txt   Keras summary (layers, output shapes, parameters)
-    reports/model_parameters.csv          total / trainable / non-trainable parameters
-    reports/training_cost.csv             the same CPU costs per experiment run, incl. every fine-tuning depth of Model 3
-    reports/resource_report.md            training time per step, estimated epoch time, inference latency
-
-All variants are timed under the same conditions (idle CPU, same batches), so their costs can be
-compared - unlike the wall-clock training times in reports/experiment_log.csv.
+All variants are timed the same way, so their costs can be compared (the wall-clock training times
+in reports/experiment_log.csv depend on what else was running).
 """
+
 import argparse
 import os
-import platform
 import sys
 import time
 from pathlib import Path
@@ -32,7 +25,6 @@ from src.config import IMG_SIZE, REPORTS_DIR, load_json  # noqa: E402
 from src.data_pipeline import load_split, make_dataset  # noqa: E402
 from src.evaluation.metrics import measure_inference_time  # noqa: E402
 from src.models import build_model, compile_model, label_mode_of, set_backbone_trainable  # noqa: E402
-from src.training.cpu import use_all_cores  # noqa: E402
 
 VARIANTS = [  # (report name, model name, transfer fine-tuning point, experiment run, write a summary file)
     ("model1_simple_cnn", "simple_cnn", None, "model1_simple_cnn", True),
@@ -46,17 +38,6 @@ VARIANTS = [  # (report name, model name, transfer fine-tuning point, experiment
 ]
 
 
-def cpu_name():
-    if sys.platform == "win32":  # platform.processor() only gives the CPU family on Windows
-        import winreg
-        try:
-            with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"HARDWARE\DESCRIPTION\System\CentralProcessor\0") as key:
-                return winreg.QueryValueEx(key, "ProcessorNameString")[0].strip()
-        except OSError:
-            pass
-    return platform.processor() or platform.machine()
-
-
 def count_params(model):
     trainable = int(sum(np.prod(w.shape) for w in model.trainable_weights))
     non_trainable = int(sum(np.prod(w.shape) for w in model.non_trainable_weights))
@@ -65,8 +46,13 @@ def count_params(model):
 
 def time_training(model, label_mode, batch_size, steps):
     """Seconds per training step (batch) on real, augmented training data; first epoch = warm-up."""
-    ds = make_dataset("train", label_mode=label_mode, batch_size=batch_size, augment=True,
-                      limit=batch_size * steps // 16 + 1).take(steps).repeat()
+    ds = (
+        make_dataset(
+            "train", label_mode=label_mode, batch_size=batch_size, augment=True, limit=batch_size * steps // 16 + 1
+        )
+        .take(steps)
+        .repeat()
+    )
     times = []
 
     class Timer(keras.callbacks.Callback):
@@ -85,7 +71,6 @@ def main():
     parser.add_argument("--steps", type=int, default=20, help="timed training steps per model")
     parser.add_argument("--no-timing", action="store_true", help="only summaries and parameter counts (CPU busy)")
     args = parser.parse_args()
-    use_all_cores()
     cfg = load_json("training_config.json")
     batch_size = cfg["common"]["batch_size"]
     n_train, n_val = len(load_split("train")), len(load_split("val"))
@@ -108,8 +93,15 @@ def main():
             (out_dir / f"{report_name}.txt").write_text("\n".join(lines), encoding="utf-8")
         total, trainable, non_trainable = count_params(model)
         if args.no_timing:
-            rows.append({"model": report_name, "run": run, "total_params": total, "trainable_params": trainable,
-                         "non_trainable_params": non_trainable})
+            rows.append(
+                {
+                    "model": report_name,
+                    "run": run,
+                    "total_params": total,
+                    "trainable_params": trainable,
+                    "non_trainable_params": non_trainable,
+                }
+            )
             print(rows[-1], flush=True)
             keras.backend.clear_session()
             continue
@@ -120,25 +112,34 @@ def main():
         lat1 = measure_inference_time(model, IMG_SIZE, batch_size=1)
         lat32 = measure_inference_time(model, IMG_SIZE, batch_size=32, n_runs=10)
         epoch_est = step * steps_per_epoch + val_batches * lat32 * 32 / 1000
-        rows.append({"model": report_name, "run": run, "total_params": total, "trainable_params": trainable,
-                     "non_trainable_params": non_trainable, "train_s_per_step": round(step, 3),
-                     "est_epoch_min": round(epoch_est / 60, 1), "infer_ms_per_img_bs1": round(lat1, 2),
-                     "infer_ms_per_img_bs32": round(lat32, 2)})
+        rows.append(
+            {
+                "model": report_name,
+                "run": run,
+                "total_params": total,
+                "trainable_params": trainable,
+                "non_trainable_params": non_trainable,
+                "train_s_per_step": round(step, 3),
+                "est_epoch_min": round(epoch_est / 60, 1),
+                "infer_ms_per_img_bs1": round(lat1, 2),
+                "infer_ms_per_img_bs32": round(lat32, 2),
+            }
+        )
         print(rows[-1], flush=True)
         keras.backend.clear_session()
 
     table = pd.DataFrame(rows)
     main = table[table["model"].isin([v[0] for v in VARIANTS if v[4]])]
     main[["model", "total_params", "trainable_params", "non_trainable_params"]].to_csv(
-        REPORTS_DIR / "model_parameters.csv", index=False)
+        REPORTS_DIR / "model_parameters.csv", index=False
+    )
     if args.no_timing:
         return
     table.drop(columns="model").to_csv(REPORTS_DIR / "training_cost.csv", index=False)
-    cpu = cpu_name()
     md = [
         "# Resource report (CPU)",
         "",
-        f"- Hardware: {cpu}, {os.cpu_count()} logical cores; no GPU used (TensorFlow {tf.__version__} on Windows is CPU-only)",
+        f"- CPU only: {os.cpu_count()} logical cores, no GPU (TensorFlow {tf.__version__} on Windows has no GPU support)",
         f"- Keras {keras.__version__}, batch size {batch_size}, input {IMG_SIZE}x{IMG_SIZE}x3, augmentation on",
         f"- Training split: {n_train} images ({int(np.ceil(n_train / batch_size))} steps/epoch); validation: {n_val} images",
         f"- Step time measured over {args.steps} steps after one warm-up epoch; epoch estimate = training steps + one validation pass",
@@ -150,8 +151,10 @@ def main():
         "|---|---:|---:|---:|---:|---:|---:|---:|",
     ]
     for r in rows:
-        md.append(f"| {r['model']} | {r['total_params']:,} | {r['trainable_params']:,} | {r['non_trainable_params']:,} | "
-                  f"{r['train_s_per_step']} | {r['est_epoch_min']} | {r['infer_ms_per_img_bs1']} | {r['infer_ms_per_img_bs32']} |")
+        md.append(
+            f"| {r['model']} | {r['total_params']:,} | {r['trainable_params']:,} | {r['non_trainable_params']:,} | "
+            f"{r['train_s_per_step']} | {r['est_epoch_min']} | {r['infer_ms_per_img_bs1']} | {r['infer_ms_per_img_bs32']} |"
+        )
     (REPORTS_DIR / "resource_report.md").write_text("\n".join(md) + "\n", encoding="utf-8")
     print("\n".join(md))
 

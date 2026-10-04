@@ -30,7 +30,7 @@
     },
     "transfer": {
       "loss_weights": {"fruit": 1.0, "freshness": 1.0},
-      "build": {"backbone": "mobilenet_v2", "dropout": 0.3},
+      "build": {"dropout": 0.3},
       "stage1": {"learning_rate": 0.001, "epochs": 12},
       "stage2": {"learning_rate": 0.0001, "epochs": 25, "fine_tune_from": "block_13_expand"}
     }

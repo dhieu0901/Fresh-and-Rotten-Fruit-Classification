@@ -1,4 +1,5 @@
-"""Checks for the fixed splits and the shared tf.data pipeline.  Run: python -m pytest tests -q"""
+"""Tests for the split files and the tf.data pipeline. Needs the dataset (download_data, audit_data, make_splits)."""
+
 import sys
 from pathlib import Path
 

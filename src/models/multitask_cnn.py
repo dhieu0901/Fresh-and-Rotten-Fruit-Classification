@@ -1,20 +1,5 @@
-"""Model 2 - multi-branch, multi-task CNN built with the Keras Functional API.
+"""Model 2: residual CNN (one ResNet block per stage, like ResNet-10) shared by a fruit head and a freshness head."""
 
-A shared convolutional trunk made of residual blocks (ResNet-style "CNN blocks" with batch
-normalisation, Chapter 5.2; one block per stage like ResNet-10) splits into two parallel heads
-(src/models/heads.py): an 8-way softmax for the fruit type and a sigmoid for freshness (P(spoiled)).
-
-    224x224x3 -> Rescaling(1/255)
-      stem    : Conv 3x3/2 (32) - BN - ReLU -> MaxPool 2x2               56x56x32
-      stage 1 : ResBlock(64)                                             56x56x64
-      stage 2 : ResBlock(128, stride 2)                                  28x28x128
-      stage 3 : ResBlock(256, stride 2)                                  14x14x256
-      stage 4 : ResBlock(512, stride 2)                                   7x7x512
-      heads   : GAP -> fruit (8, softmax) | freshness (1, sigmoid)
-
-ResBlock(f, s): Conv 3x3/s - BN - ReLU - Conv 3x3 - BN, added to the shortcut (identity, or
-1x1 conv/s + BN when the shape changes), then ReLU.
-"""
 import keras
 from keras import layers
 
@@ -35,7 +20,7 @@ def residual_block(x, filters, strides=1, name="res"):
     y = layers.Activation("relu", name=f"{name}_relu1")(y)
     y = layers.Conv2D(filters, 3, padding="same", use_bias=False, name=f"{name}_conv2")(y)
     y = layers.BatchNormalization(name=f"{name}_bn2")(y)
-    if strides != 1 or x.shape[-1] != filters:
+    if strides != 1 or x.shape[-1] != filters:  # 1x1 conv so the shortcut has the same shape
         shortcut = layers.Conv2D(filters, 1, strides=strides, use_bias=False, name=f"{name}_proj")(x)
         shortcut = layers.BatchNormalization(name=f"{name}_proj_bn")(shortcut)
     y = layers.Add(name=f"{name}_add")([y, shortcut])
@@ -53,7 +38,9 @@ def build_trunk(inputs, stem_filters=32, widths=(64, 128, 256, 512), blocks_per_
     return x
 
 
-def build_multitask_cnn(img_size=IMG_SIZE, dropout=0.3, stem_filters=32, widths=(64, 128, 256, 512), blocks_per_stage=1):
+def build_multitask_cnn(
+    img_size=IMG_SIZE, dropout=0.3, stem_filters=32, widths=(64, 128, 256, 512), blocks_per_stage=1
+):
     inputs = keras.Input(shape=(img_size, img_size, 3), name="image")
     features = build_trunk(inputs, stem_filters, widths, blocks_per_stage)
     fruit, freshness = build_heads(features, dropout)

@@ -1,5 +1,5 @@
-"""Smoke tests: every model builds, has the right outputs and survives one training step.
-Run: python -m pytest tests -q   (no ImageNet download: the transfer model uses weights=None)"""
+"""Every model builds, has outputs of the right shape and can do one training step (transfer model without ImageNet weights)."""
+
 import sys
 from pathlib import Path
 
@@ -47,7 +47,9 @@ def test_transfer_model_freezing():
 
     tuned = set_backbone_trainable(model, "block_13_expand")
     assert tuned["unfrozen_layers"] > 0 and tuned["trainable_params"] > head_params
-    bn_trainable = [l.name for l in model.layers if l.__class__.__name__ == "BatchNormalization" and l.trainable]
+    bn_trainable = [
+        layer.name for layer in model.layers if layer.__class__.__name__ == "BatchNormalization" and layer.trainable
+    ]
     assert bn_trainable == []  # batch norm stays in inference mode while fine-tuning
 
     full = set_backbone_trainable(model, "all")

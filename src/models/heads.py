@@ -1,10 +1,5 @@
-"""The two output heads shared by Model 2 and Model 3 (multi-task learning).
+"""Output heads of Models 2 and 3: fruit type (8-way softmax) and freshness (sigmoid = P(spoiled))."""
 
-    feature map -> GlobalAveragePooling2D -+-> Dense(128, ReLU) -> Dropout -> Dense(8, softmax)  "fruit"
-                                           +-> Dense(64, ReLU)  -> Dropout -> Dense(1, sigmoid)  "freshness"
-
-The freshness output is P(spoiled); spoiled is the positive class.
-"""
 from keras import layers
 
 from src.config import NUM_FRUITS

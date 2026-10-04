@@ -1,10 +1,9 @@
-"""Project-wide paths, label maps and constants.
+"""Paths, label names and constants used by all scripts.
 
-Label encoding used everywhere in the project:
-    fruit_label     0..7  (alphabetical order of FRUITS)
-    freshness_label 0 = fresh, 1 = spoiled  (spoiled is the positive class)
-    combined_label  fruit_label * 2 + freshness_label  (0..15)
+Labels: fruit_label 0-7 (order of FRUITS), freshness_label 0 = fresh / 1 = spoiled,
+combined_label = fruit_label * 2 + freshness_label (0-15).
 """
+
 import json
 from pathlib import Path
 

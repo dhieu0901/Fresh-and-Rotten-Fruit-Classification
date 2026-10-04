@@ -1,25 +1,14 @@
-"""Model 1 - simple sequential CNN baseline.
+"""Model 1: plain Sequential CNN (5 x Conv-ReLU-MaxPool, then dense layers) with one softmax over the 16 classes."""
 
-Stacked Conv2D-ReLU-MaxPool blocks followed by fully connected layers (Keras Sequential API).
-It predicts the 16 combined classes (8 fruits x fresh/spoiled) with one softmax; fruit type
-and freshness are decoded from the combined label afterwards (fruit = c // 2, spoiled = c % 2).
-
-    224x224x3 -> Rescaling(1/255)
-      -> [Conv 3x3 (32) -> ReLU -> MaxPool 2x2]   112x112x32
-      -> [Conv 3x3 (64) -> ReLU -> MaxPool 2x2]    56x56x64
-      -> [Conv 3x3 (128) -> ReLU -> MaxPool 2x2]   28x28x128
-      -> [Conv 3x3 (128) -> ReLU -> MaxPool 2x2]   14x14x128
-      -> [Conv 3x3 (256) -> ReLU -> MaxPool 2x2]    7x7x256
-      -> Flatten (12544) -> Dense(256, ReLU) -> Dropout(0.5) -> Dense(16, softmax)
-"""
 import keras
 from keras import layers
 
 from src.config import IMG_SIZE, NUM_COMBINED
 
 
-def build_simple_cnn(img_size=IMG_SIZE, num_classes=NUM_COMBINED, filters=(32, 64, 128, 128, 256),
-                     dense_units=256, dropout=0.5):
+def build_simple_cnn(
+    img_size=IMG_SIZE, num_classes=NUM_COMBINED, filters=(32, 64, 128, 128, 256), dense_units=256, dropout=0.5
+):
     model = keras.Sequential(name="model1_simple_cnn")
     model.add(keras.Input(shape=(img_size, img_size, 3), name="image"))
     model.add(layers.Rescaling(1.0 / 255, name="rescale"))

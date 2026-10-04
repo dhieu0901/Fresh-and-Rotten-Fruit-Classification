@@ -1,0 +1,9 @@
+run,total_params,trainable_params,non_trainable_params,train_s_per_step,est_epoch_min,infer_ms_per_img_bs1,infer_ms_per_img_bs32
+model1_simple_cnn,3751632,3751632,0,0.691,3.9,15.48,6.01
+model2_multitask_cnn,4986345,4980521,5824,0.877,5.0,20.32,6.35
+model3_ft_none,2505033,247049,2257984,0.466,3.0,34.66,12.54
+model3_ft_block16,2505033,1126089,1378944,0.492,3.1,34.83,12.5
+model3_mobilenet_v2,2505033,1910409,594624,0.531,3.3,35.06,12.51
+model3_ft_block10,2505033,2206857,298176,0.574,3.6,36.13,12.97
+model3_ft_block6,2505033,2384841,120192,0.6,3.7,34.65,12.62
+model3_ft_all,2505033,2436809,68224,0.931,5.5,36.03,12.72

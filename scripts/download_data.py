@@ -1,11 +1,9 @@
-"""Download and extract the Spoiled and Fresh Fruit Inspection Dataset (Mendeley 6ps7gtp2wg v1).
+"""Download and unzip the Spoiled and Fresh Fruit Inspection Dataset (Mendeley 6ps7gtp2wg, version 1).
 
-Usage:
-    python scripts/download_data.py            # download (if needed) and extract
-    python scripts/download_data.py --force    # re-download and re-extract
-
-Result: data/raw/FRUIT-16K/{F_,S_}{Banana,...,Tomato}/1.jpg ... 1000.jpg
+python scripts/download_data.py            # skips the download if the data is complete
+python scripts/download_data.py --force
 """
+
 import argparse
 import shutil
 import sys
