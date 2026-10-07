@@ -2,8 +2,8 @@
 
 Joint error = fruit type or freshness (or both) wrong. Freshness: spoiled is the positive class, so a
 false alarm is a fresh fruit predicted spoiled and a miss is a spoiled fruit predicted fresh.
-Images of the errors: figures/misclassified_samples.png; Grad-CAM of the freshness errors:
-figures/gradcam/gradcam_errors.png.
+Made by notebooks/07_error_analysis_gradcam.ipynb; images of the errors: figures/misclassified_samples.png,
+Grad-CAM of the freshness errors: figures/gradcam/gradcam_errors.png.
 
 ## Error types
 

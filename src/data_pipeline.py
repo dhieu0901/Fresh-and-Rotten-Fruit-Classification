@@ -1,9 +1,3 @@
-"""tf.data pipeline shared by the three models.
-
-Images come out as float32 in [0, 255]; each model rescales its own input. Augmentation is only
-used on the training split and does not touch hue, since colour matters for freshness.
-"""
-
 import numpy as np
 import pandas as pd
 import tensorflow as tf
@@ -11,6 +5,7 @@ import tensorflow as tf
 from src.config import IMG_SIZE, PROJECT_ROOT, SEED, SPLITS_DIR
 
 AUTOTUNE = tf.data.AUTOTUNE
+# augmentation chỉ dùng cho tập train; không đổi màu (hue) vì màu nâu/đốm đen là dấu hiệu quả hỏng
 DEFAULT_AUGMENTATION = {
     "flip": "horizontal_and_vertical",
     "rotation": 0.1,
@@ -25,7 +20,7 @@ def load_split(name):
 
 
 def labels_for(df, label_mode):
-    """16-class labels for Model 1 ("combined"), fruit + freshness labels for Models 2 and 3 ("multitask")."""
+    # Model 1: một nhãn 16 lớp; Model 2 và 3: hai nhãn (loại quả, tươi/hỏng)
     if label_mode == "combined":
         return df["combined_label"].to_numpy(np.int32)
     if label_mode == "multitask":
@@ -35,7 +30,7 @@ def labels_for(df, label_mode):
 
 def decode_image(jpeg_bytes, img_size=IMG_SIZE):
     image = tf.io.decode_jpeg(jpeg_bytes, channels=3)
-    if img_size != IMG_SIZE:  # the dataset images are already 224 x 224
+    if img_size != IMG_SIZE:
         image = tf.cast(tf.image.resize(image, (img_size, img_size), antialias=True), tf.uint8)
     return tf.ensure_shape(image, (img_size, img_size, 3))
 
@@ -68,17 +63,16 @@ def make_dataset(
     limit=None,
     seed=SEED,
 ):
-    """Batches of (image, label) for one split. Only train is shuffled by default, so predictions on
-    val/test stay in CSV order. `limit` keeps the first `limit` images of each class (quick tests)."""
+    # ảnh ra dạng float32 trong [0, 255], mỗi model tự chuẩn hoá ở layer đầu tiên
     df = load_split(split)
     if limit:
         df = df.groupby("combined_label", sort=False).head(limit).reset_index(drop=True)
-    if shuffle is None:
+    if shuffle is None:  # chỉ xáo trộn tập train, val/test giữ đúng thứ tự trong file CSV
         shuffle = split == "train"
     paths = [str(PROJECT_ROOT / p) for p in df["path"]]
     ds = tf.data.Dataset.from_tensor_slices((paths, labels_for(df, label_mode)))
     ds = ds.map(lambda p, y: (tf.io.read_file(p), y), num_parallel_calls=AUTOTUNE)
-    if cache:  # cache the JPEG bytes instead of decoded images, which would not fit in RAM
+    if cache:  # cache byte JPEG thay vì ảnh đã giải mã để không bị tràn RAM
         ds = ds.cache()
     if shuffle:
         ds = ds.shuffle(len(df), seed=seed, reshuffle_each_iteration=True)
@@ -92,8 +86,7 @@ def make_dataset(
 
 
 def load_image(path, img_size=IMG_SIZE):
-    """One image file as float32 in [0, 255], decoded the same way as in the pipeline.
-    Non-square photos are centre-cropped first."""
+    # ảnh không vuông thì cắt phần giữa thành hình vuông rồi resize về 224 x 224
     image = tf.io.decode_image(tf.io.read_file(str(path)), channels=3, expand_animations=False)
     h, w = image.shape[:2]
     if h != w:

@@ -9,27 +9,21 @@
 /data/cache/
 /data/metadata.csv
 
-# trained models and training logs (too large, made by scripts/train.py)
+# trained models and training logs (too large, made by the model notebooks)
 /models/
 /logs/
 *.keras
 *.h5
 
-# per-image and per-run details (made again by scripts/evaluate.py and scripts/audit_data.py)
+# per-image details (made again by notebooks 01 and 06)
 /reports/predictions/
-/reports/per_class/
-/reports/tables/
 /reports/duplicate_groups.csv
-/reports/fruit_metrics.csv
-/reports/freshness_metrics.csv
 
 # python
 /.venv/
 __pycache__/
 *.py[cod]
 .ipynb_checkpoints/
-.pytest_cache/
-.ruff_cache/
 
 # os / editor
 .DS_Store

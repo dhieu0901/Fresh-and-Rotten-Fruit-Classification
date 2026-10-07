@@ -4,14 +4,9 @@ keras==3.15.1
 numpy==2.5.3
 pandas==3.0.6
 scikit-learn==1.9.1
-scipy==1.18.1
 matplotlib==3.11.2
 pillow==12.3.0
 imagehash==4.3.2
-tqdm==4.70.1
-openpyxl==3.1.5
-pytest==9.1.1
-# notebooks
+tabulate==0.10.0
+# to run the notebooks in VS Code or Jupyter
 ipykernel==7.4.0
-nbformat==5.11.1
-nbclient==0.11.0

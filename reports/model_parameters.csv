@@ -1,5 +1,0 @@
-model,total_params,trainable_params,non_trainable_params
-model1_simple_cnn,3751632,3751632,0
-model2_multitask_cnn,4986345,4980521,5824
-model3_mobilenet_v2_frozen,2505033,247049,2257984
-model3_mobilenet_v2_finetune,2505033,1910409,594624

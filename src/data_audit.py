@@ -1,9 +1,5 @@
-"""Dataset scan, cleaning and the grouped train/val/test split.
-
-The photos were taken in bursts, so neighbouring files in a folder are often near-copies. A random
-split by image would put almost identical frames in train and test, so the split assigns whole
-groups of related images instead.
-"""
+# Ảnh được chụp liên tiếp (burst) nên các file cạnh nhau thường gần như giống hệt. Chia ngẫu nhiên theo ảnh
+# sẽ để ảnh gần trùng nằm cả ở train và test (rò rỉ dữ liệu), vì vậy phải chia theo nhóm ảnh liên quan.
 
 import hashlib
 import time
@@ -14,7 +10,7 @@ import numpy as np
 import pandas as pd
 from PIL import Image
 
-from src.config import CACHE_DIR, DATASET_DIR, FRUITS, PROJECT_ROOT, combined_label, load_json, parse_folder
+from src.config import CACHE_DIR, DATASET_DIR, FRUITS, PROJECT_ROOT, combined_label, parse_folder
 
 THUMB_SIZE = 16
 SCAN_CSV = CACHE_DIR / "scan.csv"
@@ -22,7 +18,7 @@ THUMBS_NPY = CACHE_DIR / "thumbs.npy"
 
 
 def scan_dataset(dataset_dir):
-    """Read every image once. Returns one row per file and the 16x16 thumbnails (flattened, NaN if unreadable)."""
+    # SHA-256: tìm file trùng từng byte; pHash: tìm ảnh nhìn giống nhau; thumbnail 16x16: so sánh pixel
     rows, thumbs = [], []
     folders = sorted(p for p in Path(dataset_dir).iterdir() if p.is_dir())
     for folder in folders:
@@ -55,7 +51,7 @@ def scan_dataset(dataset_dir):
                     row[f"meansq_{channel}"] = float((pixels[..., i] ** 2).mean())
                 row["readable"] = True
                 thumb = np.asarray(rgb.resize((THUMB_SIZE, THUMB_SIZE), Image.BILINEAR), np.float32) / 255.0
-            except Exception as exc:  # broken file
+            except Exception as exc:
                 row.update(readable=False, error=repr(exc))
                 thumb = np.full((THUMB_SIZE, THUMB_SIZE, 3), np.nan, np.float32)
             rows.append(row)
@@ -64,7 +60,6 @@ def scan_dataset(dataset_dir):
 
 
 def load_or_scan(rescan=False):
-    """scan_dataset() with a cache in data/cache/."""
     if not rescan and SCAN_CSV.exists() and THUMBS_NPY.exists():
         return pd.read_csv(SCAN_CSV, keep_default_na=False, na_values=[""]), np.load(THUMBS_NPY)
     t0 = time.time()
@@ -77,15 +72,12 @@ def load_or_scan(rescan=False):
     return df, thumbs
 
 
-def prepare(rescan=False):
-    """Scan, then mark duplicates, label conflicts and excluded files (settings in configs/data_config.json)."""
-    cfg = load_json("data_config.json")
+def prepare(conflict_phash_max, conflict_thumb_max, manual_exclusions, rescan=False):
     df, thumbs = load_or_scan(rescan)
     df = mark_exact_duplicates(df)
-    lc = cfg["label_conflict"]
-    conflicts = find_label_conflicts(df, thumbs, lc["phash_max"], lc["thumb_max"])
-    df = apply_cleaning(df, conflicts, cfg["manual_exclusions"])
-    return cfg, df, thumbs, conflicts
+    conflicts = find_label_conflicts(df, thumbs, conflict_phash_max, conflict_thumb_max)
+    df = apply_cleaning(df, conflicts, manual_exclusions)
+    return df, thumbs, conflicts
 
 
 def phash_array(df):
@@ -93,12 +85,11 @@ def phash_array(df):
 
 
 def hamming(a, b):
-    """Pairwise Hamming distance between two arrays of 64-bit pHashes."""
+    # khoảng cách Hamming = số bit khác nhau giữa hai pHash 64 bit, càng nhỏ ảnh càng giống
     return np.bitwise_count(a[:, None] ^ b[None, :]).astype(np.int16)
 
 
 def thumb_distance(a, b, chunk=64):
-    """Pairwise mean absolute difference between thumbnails (0 = identical)."""
     out = np.empty((len(a), len(b)), np.float32)
     for start in range(0, len(a), chunk):
         out[start : start + chunk] = np.abs(a[start : start + chunk, None, :] - b[None, :, :]).mean(-1)
@@ -106,7 +97,7 @@ def thumb_distance(a, b, chunk=64):
 
 
 def mark_exact_duplicates(df):
-    """Flag byte-identical files; the first one of each group is kept."""
+    # file trùng từng byte: giữ file đầu tiên, bỏ các bản sao
     first = df.groupby("sha256", sort=False)["path"].transform("first")
     df["duplicate_of"] = np.where(df["path"] != first, first, "")
     df["is_exact_duplicate"] = df["duplicate_of"] != ""
@@ -114,7 +105,7 @@ def mark_exact_duplicates(df):
 
 
 def find_label_conflicts(df, thumbs, phash_max, thumb_max, chunk=2000):
-    """Near-identical images that are stored under two different labels."""
+    # cùng một ảnh nhưng nằm ở hai nhãn khác nhau
     mask = (df["readable"] & ~df["is_exact_duplicate"]).to_numpy()
     idx = np.where(mask)[0]
     ph = phash_array(df.iloc[idx])
@@ -134,13 +125,11 @@ def find_label_conflicts(df, thumbs, phash_max, thumb_max, chunk=2000):
 
 
 def apply_cleaning(df, conflicts, manual_exclusions):
-    """Columns `excluded` and `exclude_reason`: unreadable files, duplicate copies, manual exclusions,
-    and label conflicts that were not resolved by hand (both images dropped)."""
     reason = pd.Series("", index=df.index, dtype=object)
     reason[~df["readable"]] = "unreadable file"
     is_dup = (reason == "") & df["is_exact_duplicate"]
     reason[is_dup] = "exact duplicate of " + df.loc[is_dup, "duplicate_of"]
-    manual = {m["path"]: m["reason"] for m in manual_exclusions}
+    manual = dict(manual_exclusions)
     for path, why in manual.items():
         reason[df["path"] == path] = "manual review: " + why
     for a, b in conflicts[["path_a", "path_b"]].itertuples(index=False):
@@ -153,8 +142,7 @@ def apply_cleaning(df, conflicts, manual_exclusions):
 
 
 def near_duplicate_pairs(df, thumbs, phash_max, thumb_max, gap_max=0):
-    """Index pairs (i < j) of near-duplicates inside one class: close pHash, and either close thumbnails
-    or at most `gap_max` files apart (same fruit shot again a few seconds later)."""
+    # cặp gần trùng trong cùng lớp: pHash gần nhau và (thumbnail gần nhau hoặc cách nhau <= gap_max file)
     ph = phash_array(df)
     file_index = df["file_index"].to_numpy()
     pairs = []
@@ -171,7 +159,7 @@ def near_duplicate_pairs(df, thumbs, phash_max, thumb_max, gap_max=0):
 
 
 def build_groups(df, pairs, block_size):
-    """Group id per row: blocks of `block_size` consecutive frames, merged through the near-duplicate pairs (union-find)."""
+    # mỗi block_size ảnh liên tiếp là một nhóm, các nhóm có cặp gần trùng được gộp lại (union-find)
     parent = np.arange(len(df))
 
     def find(x):
@@ -198,8 +186,8 @@ def build_groups(df, pairs, block_size):
 
 
 def grouped_stratified_split(df, ratios, seed):
-    """Assign whole groups to splits, separately in each class. The largest groups go first, each to the
-    split that is furthest below its target size, so big clusters end up in train."""
+    # chia nguyên nhóm vào một tập, làm riêng cho từng lớp (stratified); nhóm lớn xếp trước,
+    # mỗi nhóm vào tập đang thiếu nhiều ảnh nhất so với tỉ lệ 70/15/15
     names = list(ratios)
     target = np.array([ratios[n] for n in names], dtype=float)
     rng = np.random.default_rng(seed)
@@ -219,7 +207,7 @@ def grouped_stratified_split(df, ratios, seed):
 
 
 def random_stratified_split(df, ratios, seed):
-    """Plain stratified split by image, only used to show the leakage in the audit."""
+    # chia ngẫu nhiên theo từng ảnh, chỉ dùng để so sánh mức rò rỉ
     from sklearn.model_selection import train_test_split
 
     idx = np.arange(len(df))
@@ -233,7 +221,7 @@ def random_stratified_split(df, ratios, seed):
 
 
 def nearest_train_match(df, thumbs, split, eval_split, phash_max, thumb_max):
-    """Distance from each image of `eval_split` to the closest train image of the same class."""
+    # với mỗi ảnh val/test: ảnh train cùng lớp giống nó nhất
     ph = phash_array(df)
     records = []
     for _, idx in df.groupby("combined_label").indices.items():

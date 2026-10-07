@@ -34,23 +34,28 @@ Ablations:
 - **Data augmentation** (flips, rotation, zoom, brightness, contrast). Without it Model 1 drops to 92.37 % (168 wrong images): it overfits, since most of its weights are in the dense layer after Flatten. Model 2, which uses global average pooling, stays the same (98.05 %), and Model 3 gets a little worse (99.32 %).
 - **Number of fine-tuned layers** (Model 3, all runs start from the same stage-1 weights): only the new layers 98.18 %, from block 16 99.36 %, block 13 99.73 %, block 10 99.77 %, block 6 99.64 %, all layers 99.86 %. Fine-tuning helps a lot for freshness. After block 13 the differences are only a few images, while training all layers is almost twice as slow.
 
-Grad-CAM shows that Model 3 mostly looks at the fruit and its spoiled spots, while the two smaller CNNs sometimes look at the background:
+Grad-CAM shows that Model 3 looks at the fruit itself, while the two smaller CNNs sometimes look at the background:
 
 ![Grad-CAM of the freshness decision](figures/gradcam/gradcam_spoiled.png)
 
-More tables are in `reports/`: `results_summary.md`, `error_analysis.md`, `resource_report.md` and `split_audit.txt`.
+More tables are in `reports/` (`results_summary.md`, `error_analysis.md`, `final_metrics.csv`) and in the notebooks.
 
 ## Repository
 
 ```text
-configs/       data and training settings
+notebooks/
+  01_data_preparation.ipynb        download, cleaning, duplicates, grouped split, leakage check
+  02_input_pipeline.ipynb          tf.data batches, labels, augmentation
+  03_model1_simple_cnn.ipynb       Model 1 + ablation without augmentation
+  04_model2_multitask_cnn.ipynb    Model 2 + ablation without augmentation
+  05_model3_mobilenet_v2.ipynb     Model 3 (two stages) + fine-tuning depth and augmentation ablations
+  06_evaluation.ipynb              test metrics, confusion matrices, model size and speed
+  07_error_analysis_gradcam.ipynb  errors of the three models, Grad-CAM
+  08_demo.ipynb                    predictions for new images
+src/           code shared by several notebooks (paths and labels, tf.data pipeline, dataset audit, metrics, Grad-CAM)
 data/splits/   the train/val/test split used for all experiments
 demo/          a few test images for the demo
-notebooks/     01 data checks, 02 demo with Grad-CAM
-scripts/       download, audit, split, train, evaluate, Grad-CAM, predict
-src/           data pipeline, models, callbacks, metrics
-tests/         pytest checks for the split, the pipeline and the models
-figures/, reports/   results made by the scripts
+figures/, reports/   results written by the notebooks
 ```
 
 ## How to run
@@ -59,16 +64,6 @@ Python 3.12 with TensorFlow 2.21 (everything was trained on a CPU).
 
 ```bash
 pip install -r requirements.txt
-python scripts/download_data.py
-python scripts/audit_data.py
-python scripts/make_splits.py        # gives the same split as data/splits/
-python scripts/run_experiments.py    # all 11 training runs, takes many hours on a CPU
-python scripts/model_report.py
-python scripts/evaluate.py
-python scripts/gradcam.py
-python scripts/error_analysis.py
-python scripts/predict.py demo/demo_images/*.jpg
-pytest tests
 ```
 
-One model can also be trained on its own, e.g. `python scripts/train.py --model simple_cnn` (or `multitask_cnn`, `transfer`). The trained weights are not in the repository because of their size.
+Then run the notebooks in order (VS Code or Jupyter). Notebook 01 downloads the dataset (about 95 MB) and makes the same split as in `data/splits/`. The model notebooks 03-05 have a switch `TRAIN` at the top: with `TRAIN = True` they train the models from scratch (several hours each on a CPU), with `TRAIN = False` they load the saved models from `models/`. The trained weights are not in the repository because of their size, so the notebooks are saved with their outputs.
